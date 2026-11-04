@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="NtdllExportWalker.vcxproj" Id="71476aca-b82e-4aa6-84c0-cd3adc056c03" />
+</Solution>
