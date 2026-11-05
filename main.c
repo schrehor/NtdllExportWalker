@@ -424,11 +424,17 @@ int wmain(int argc, wchar_t* argv[])
 		{
 			SIZE_T length = wcslen(argv[++i]);
 			if (!length || length >= sizeof(wanted))
+			{
+				fprintf(stderr, "[-] Export name is empty or too long\n");
 				return EXIT_FAILURE;
+			}
 			for (SIZE_T j = 0; j < length; ++j)
 			{
 				if (argv[i][j] > 127 || argv[i][j] < 1)
+				{
+					fprintf(stderr, "[-] Export names must use ASCII bytes\n");
 					return EXIT_FAILURE;
+				}
 				wanted[j] = (char)argv[i][j];
 			}
 			selected = TRUE;
