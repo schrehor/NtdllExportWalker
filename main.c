@@ -30,7 +30,9 @@ typedef struct
 static const void* AddAddress(const void* base, SIZE_T offset)
 {
 	if (!base || (ULONG_PTR)base > ~(ULONG_PTR)0 - offset)
+	{
 		return NULL;
+	}
 	return (const void*)((ULONG_PTR)base + offset);
 }
 
@@ -38,7 +40,9 @@ static BOOL ReadLocal(const void* address, void* output, SIZE_T size)
 {
 	SIZE_T copied = 0;
 	if (address == NULL || (ULONG_PTR)address > ~(ULONG_PTR)0 - size)
+	{
 		return FALSE;
+	}
 
 	return ReadProcessMemory(GetCurrentProcess(), address, output, size, &copied)
 		&& copied == size;
@@ -60,19 +64,27 @@ static BOOL MatchModuleName(
 	if (expectedLength == 0 || expectedLength + 1 >= _countof(tail)
 		|| name->Length % sizeof(wchar_t) != 0
 		|| name->Length > name->MaximumLength)
+	{
 		return FALSE;
+	}
 	if (length < expectedLength)
+	{
 		return TRUE;
+	}
 
 	count = length > expectedLength ? expectedLength + 1 : expectedLength;
 	offset = name->Length - count * sizeof(wchar_t);
 	if (address == 0 || address > ~(ULONG_PTR)0 - offset
 		|| !ReadLocal((const void*)(address + offset), tail,
 			count * sizeof(wchar_t)))
+	{
 		return FALSE;
+	}
 
 	if (count > expectedLength && tail[0] != L'\\' && tail[0] != L'/')
+	{
 		return TRUE;
+	}
 	*match = _wcsnicmp(tail + count - expectedLength, expected, expectedLength) == 0;
 	return TRUE;
 }
@@ -189,14 +201,20 @@ static BOOL ReadImageString(
 	char output[MAX_EXPORT_TEXT])
 {
 	if (limit > image->size || rva >= limit)
+	{
 		return FALSE;
+	}
 	for (SIZE_T i = 0; i < MAX_EXPORT_TEXT; ++i)
 	{
 		if (!Fits(limit, (SIZE_T)rva + i, 1)
 			|| !ReadImage(image, (SIZE_T)rva + i, &output[i], 1))
+		{
 			return FALSE;
+		}
 		if (output[i] == '\0')
+		{
 			return i != 0;
+		}
 	}
 	return FALSE;
 }
@@ -210,7 +228,9 @@ static BOOL GetImageSpan(HMODULE module, SIZE_T* span)
 	{
 		MEMORY_BASIC_INFORMATION memory;
 		if (!VirtualQuery((const void*)cursor, &memory, sizeof(memory)))
+		{
 			return FALSE;
+		}
 		if (memory.AllocationBase != module)
 		{
 			*span = cursor - start;
@@ -218,10 +238,14 @@ static BOOL GetImageSpan(HMODULE module, SIZE_T* span)
 		}
 		if (memory.Type != MEM_IMAGE || memory.RegionSize == 0
 			|| (ULONG_PTR)memory.BaseAddress > ~(ULONG_PTR)0 - memory.RegionSize)
+		{
 			return FALSE;
+		}
 		ULONG_PTR next = (ULONG_PTR)memory.BaseAddress + memory.RegionSize;
 		if (next <= cursor || next - start > MAXDWORD)
+		{
 			return FALSE;
+		}
 		cursor = next;
 	}
 	return FALSE;
@@ -250,13 +274,17 @@ static BOOL OpenExports(
 		|| signature != IMAGE_NT_SIGNATURE
 		|| !ReadImage(image, (SIZE_T)dos.e_lfanew + sizeof(signature), &file, sizeof(file))
 		|| !(file.Characteristics & IMAGE_FILE_EXECUTABLE_IMAGE))
+	{
 		return FALSE;
+	}
 
 	optionalOffset = (SIZE_T)dos.e_lfanew + sizeof(signature) + sizeof(file);
 	if (!Fits(span, optionalOffset, file.SizeOfOptionalHeader)
 		|| file.SizeOfOptionalHeader < sizeof(WORD)
 		|| !ReadImage(image, optionalOffset, &image->format, sizeof(image->format)))
+	{
 		return FALSE;
+	}
 	if (image->format == IMAGE_NT_OPTIONAL_HDR32_MAGIC)
 	{
 		fixedSize = offsetof(IMAGE_OPTIONAL_HEADER32, DataDirectory);
@@ -272,7 +300,9 @@ static BOOL OpenExports(
 		countOffset = offsetof(IMAGE_OPTIONAL_HEADER64, NumberOfRvaAndSizes);
 	}
 	else
+	{
 		return FALSE;
+	}
 
 	if (file.SizeOfOptionalHeader < fixedSize
 		|| !ReadImage(image, optionalOffset + imageSizeOffset, &imageSize, sizeof(imageSize))
@@ -283,21 +313,27 @@ static BOOL OpenExports(
 		|| !directories
 		|| directories > (file.SizeOfOptionalHeader - fixedSize) / sizeof(IMAGE_DATA_DIRECTORY)
 		|| !ReadImage(image, optionalOffset + fixedSize, &image->directory, sizeof(image->directory)))
+	{
 		return FALSE;
+	}
 
 	image->size = imageSize;
 	*error = L"PE export directory or tables are outside the image";
 	if (!image->directory.VirtualAddress || image->directory.Size < sizeof(image->exports)
 		|| !Fits(imageSize, image->directory.VirtualAddress, image->directory.Size)
 		|| !ReadImage(image, image->directory.VirtualAddress, &image->exports, sizeof(image->exports)))
+	{
 		return FALSE;
+	}
 
 	const IMAGE_EXPORT_DIRECTORY* exports = &image->exports;
 	if (!exports->NumberOfFunctions || !exports->AddressOfFunctions
 		|| exports->NumberOfFunctions > imageSize / sizeof(DWORD)
 		|| !Fits(imageSize, exports->AddressOfFunctions,
 			(SIZE_T)exports->NumberOfFunctions * sizeof(DWORD)))
+	{
 		return FALSE;
+	}
 	if (exports->NumberOfNames
 		&& (!exports->AddressOfNames || !exports->AddressOfNameOrdinals
 			|| exports->NumberOfNames > imageSize / sizeof(DWORD)
@@ -305,7 +341,9 @@ static BOOL OpenExports(
 				(SIZE_T)exports->NumberOfNames * sizeof(DWORD))
 			|| !Fits(imageSize, exports->AddressOfNameOrdinals,
 				(SIZE_T)exports->NumberOfNames * sizeof(WORD))))
+	{
 		return FALSE;
+	}
 	return TRUE;
 }
 
@@ -332,7 +370,9 @@ static BOOL ReadExport(
 		|| !ReadImage(image, (SIZE_T)exports->AddressOfFunctions + ordinal * sizeof(DWORD),
 			&entry->rva, sizeof(entry->rva))
 		|| !entry->rva || entry->rva >= image->size)
+	{
 		return FALSE;
+	}
 
 	entry->ordinal = exports->Base + ordinal;
 	entry->forwarded = entry->rva >= image->directory.VirtualAddress && entry->rva < directoryEnd;
@@ -355,10 +395,14 @@ static BOOL PrintExports(
 	{
 		EXPORT_ENTRY entry;
 		if (!ReadExport(image, i, &entry, error))
+		{
 			return FALSE;
+		}
 		if (wanted ? _stricmp(entry.name, wanted) != 0
 			: (!all && strncmp(entry.name, "Nt", 2) != 0 && strncmp(entry.name, "Zw", 2) != 0))
+		{
 			continue;
+		}
 
 		const void* address = AddAddress(image->base, entry.rva);
 		const char* result = "NOT_REQUESTED";
@@ -379,7 +423,9 @@ static BOOL PrintExports(
 		printf("[+] ADDRESS %s %p\n", entry.name, address);
 		++displayed;
 		if (wanted)
+		{
 			break;
+		}
 	}
 	printf("[+] Displayed exports - %lu\n", displayed);
 	if (wanted && !displayed)
@@ -415,11 +461,17 @@ int wmain(int argc, wchar_t* argv[])
 			return EXIT_SUCCESS;
 		}
 		if (wcscmp(argv[i], L"--compare") == 0 && !compare)
+		{
 			compare = TRUE;
+		}
 		else if (wcscmp(argv[i], L"--base") == 0 && !selected)
+		{
 			base = selected = TRUE;
+		}
 		else if (wcscmp(argv[i], L"--all") == 0 && !selected)
+		{
 			all = selected = TRUE;
+		}
 		else if (wcscmp(argv[i], L"--name") == 0 && !selected && i + 1 < argc)
 		{
 			SIZE_T length = wcslen(argv[++i]);
@@ -458,7 +510,9 @@ int wmain(int argc, wchar_t* argv[])
 		HMODULE apiModule = GetModuleHandleW(L"ntdll.dll");
 		printf("[+] Module API comparison - %s\n", apiModule == module ? "MATCH" : "MISMATCH");
 		if (apiModule != module)
+		{
 			return EXIT_FAILURE;
+		}
 	}
 	if (!base)
 	{
